@@ -1,8 +1,8 @@
 // Play against the networks in the browser. The rules come from chess.js; the networks run with onnxruntime-web.
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
-import { encode } from "./encode.js";
-import { search } from "./search.js";
-import * as sound from "./sound.js";
+import { encode } from "./encode.js?v=5";
+import { search } from "./search.js?v=5";
+import * as sound from "./sound.js?v=5";
 
 // Ratings: no search, Stockfish's UCI_Elo scale at 120+1 (chess/logs/ratings_table.md, 2026-11-14).
 const MODELS = [
