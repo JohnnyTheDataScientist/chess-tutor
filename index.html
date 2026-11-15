@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Johnny the Chess Tutor: play my chess models</title>
+<meta name="description" content="Play chess against three neural networks trained from scratch. They run in your browser: no account, nothing uploaded.">
+<link rel="icon" href="img/wp.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <img class="avatar" src="img/johnny.jpg" alt="Johnny, a cartoon chess tutor holding a white pawn">
+  <div>
+    <h1>Johnny the Chess Tutor</h1>
+    <p class="tagline">Play the chess models I trained. They run in your browser.</p>
+  </div>
+</header>
+
+<main id="setup" class="setup">
+  <h2 class="step"><span>1</span>Choose your opponent</h2>
+  <div id="models" class="models"></div>
+
+  <h2 class="step"><span>2</span>Choose your colour</h2>
+  <div class="seg" id="colour">
+    <button data-c="w" class="on">White</button>
+    <button data-c="b">Black</button>
+    <button data-c="r">Random</button>
+  </div>
+
+  <div class="start-row">
+    <button id="start" class="start" disabled>Choose an opponent first</button>
+    <p id="setup-hint" class="hint" role="status" aria-live="polite"></p>
+  </div>
+
+  <details>
+    <summary>How these models work</summary>
+    <p>Each model is a neural network that looks at the board once and picks the move it rates highest.
+       There is no search: it does not calculate ahead, so it plays instantly and can miss tactics a
+       calculating engine would see.</p>
+    <p>The ratings are measured in games against Stockfish's limited-strength levels at 2 minutes + 1 second.
+       They are on Stockfish's scale, which is anchored to engine rating lists, so read them as a rough
+       guide, not as a human rating.</p>
+    <p>To keep games from repeating, the model picks among its top choices in its first three moves.
+       After that it always plays its first choice.</p>
+    <p>Nothing you play is uploaded. The model files are downloaded once and run on your device.</p>
+  </details>
+</main>
+
+<main id="play" class="play" hidden>
+  <section class="board-col">
+    <div class="side-label" id="top-label"></div>
+    <div class="board-wrap">
+      <div id="board" class="board" aria-label="Chess board"></div>
+      <div id="result" class="result" hidden></div>
+    </div>
+    <div class="side-label" id="bottom-label"></div>
+    <div class="bar-wrap" title="How the model rates the position: its expected score">
+      <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+      <div class="bar-text"><span id="bar-you">You</span><span id="bar-model">Model</span></div>
+    </div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div class="controls">
+      <button id="new">New game</button>
+      <button id="undo">Take back</button>
+      <button id="flip">Flip board</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Your opponent</h2>
+    <div id="vs" class="model vs"></div>
+    <button id="change" class="change">Change opponent or colour</button>
+
+    <h2>Moves</h2>
+    <div id="moves" class="moves"></div>
+  </section>
+</main>
+
+<div id="promo" class="promo" hidden></div>
+
+<footer>
+  <p>Chess pieces by Cburnett, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>,
+     via Wikimedia Commons.
+     <a href="https://www.youtube.com/@JohnnyTheChessTutor">YouTube</a> ·
+     <a href="https://ko-fi.com/johnnypan">Support on Ko-fi</a></p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.js" crossorigin="anonymous"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

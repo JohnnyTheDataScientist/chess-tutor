@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Encoding test</title>
+<body style="font-family:system-ui;background:#16181e;color:#eee;padding:16px">
+<h3>Browser code vs Python (150 positions)</h3>
+<pre id="out">running...</pre>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.js" crossorigin="anonymous"></script>
+<script type="module">
+import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
+import { encode, pick } from "../encode.js";
+const out = document.getElementById("out");
+const R = { positions: 0, planes_wrong: 0, moves_wrong: 0, best: {}, score_max_diff: {}, errors: [] };
+window.RESULTS = R; window.DONE = false;
+try {
+  const vectors = await (await fetch("vectors.json")).json();
+  ort.env.wasm.numThreads = 1;
+  const sessions = {};
+  for (const k of ["human", "engine", "transformer"]) {
+    sessions[k] = await ort.InferenceSession.create("../models/" + k + ".onnx", { executionProviders: ["wasm"] });
+    R.best[k] = 0; R.score_max_diff[k] = 0;
+  }
+  for (const v of vectors) {
+    const chess = new Chess(v.fen);
+    const { x, moves } = encode(chess);
+    const ones = []; x.forEach((val, i) => { if (val) ones.push(i); });
+    if (JSON.stringify(ones) !== JSON.stringify(v.ones)) { R.planes_wrong++; R.errors.push("planes " + v.fen); }
+    const mine = {}; moves.forEach((m) => { mine[m.move.from + m.move.to + (m.move.promotion || "")] = m.index; });
+    const keys = Object.keys(v.moves);
+    if (keys.length !== moves.length || keys.some((u) => mine[u] !== v.moves[u])) {
+      R.moves_wrong++; R.errors.push("moves " + v.fen);
+    }
+    for (const k of Object.keys(sessions)) {
+      const o = await sessions[k].run({ x: new ort.Tensor("float32", x, [1, 18, 8, 8]) });
+      const { best, score } = pick(o.p.data, o.v.data, moves);
+      const uci = best.move.from + best.move.to + (best.move.promotion || "");
+      if (uci === v.best[k]) R.best[k]++; else R.errors.push(k + " " + v.fen + " js " + uci + " py " + v.best[k]);
+      R.score_max_diff[k] = Math.max(R.score_max_diff[k], Math.abs(score - v.score[k]));
+    }
+    R.positions++;
+    out.textContent = JSON.stringify(R, null, 1);
+  }
+} catch (e) { R.errors.push(String(e)); }
+window.DONE = true; R.done = true;
+out.textContent = JSON.stringify(R, null, 1);
+</script>
