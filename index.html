@@ -6,7 +6,7 @@
 <title>Johnny the Chess Tutor: play my chess models</title>
 <meta name="description" content="Play chess against three neural networks trained from scratch. They run in your browser: no account, nothing uploaded.">
 <link rel="icon" href="img/wp.png">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header>
@@ -41,8 +41,8 @@
     <p>The ratings are measured in games against Stockfish's limited-strength levels at 2 minutes + 1 second.
        They are on Stockfish's scale, which is anchored to engine rating lists, so read them as a rough
        guide, not as a human rating.</p>
-    <p>"The Transformer, thinking" adds search: before each move it tries 200 positions, guided by the
-       network, and plays the move it visited most. It is far stronger, and it needs a few seconds per move
+    <p>"The Transformer, thinking" adds search: before each move it tries 50 positions, guided by the
+       network, and plays the move it visited most. It is stronger, and it needs a few seconds per move
        (longer on phones).</p>
     <p>To keep games from repeating, the model picks among its top choices in its first three moves.
        After that it always plays its first choice.</p>
@@ -93,6 +93,6 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.js" crossorigin="anonymous"></script>
-<script type="module" src="app.js?v=5"></script>
+<script type="module" src="app.js?v=6"></script>
 </body>
 </html>

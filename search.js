@@ -8,7 +8,7 @@
 // Checkmate, stalemate, the 50-move rule and insufficient material are scored exactly; any repetition of an earlier
 // position (in the game or on the search path) counts as a draw. The move played is the most-visited root child.
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
-import { encode } from "./encode.js?v=5";
+import { encode } from "./encode.js?v=6";
 
 const C_PUCT = 1.5, FPU = 0.25;
 
