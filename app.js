@@ -1,6 +1,8 @@
 // Play against the networks in the browser. The rules come from chess.js; the networks run with onnxruntime-web.
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
 import { encode } from "./encode.js";
+import { search } from "./search.js";
+import * as sound from "./sound.js";
 
 // Ratings: no search, Stockfish's UCI_Elo scale at 120+1 (chess/logs/ratings_table.md, 2026-11-14).
 const MODELS = [
@@ -9,7 +11,10 @@ const MODELS = [
   { id: "engine", name: "The Apprentice", elo: "about 1490", mb: 2.1,
     what: "The same small network, taught by Stockfish's verdicts instead of human moves." },
   { id: "transformer", name: "The Transformer", elo: "about 1950", mb: 10.1,
-    what: "A larger network with attention, taught by Stockfish. The strongest of the three." },
+    what: "A larger network with attention, taught by Stockfish. Plays instantly." },
+  // the same network with search: it tries 200 positions before each move (rated 2878 +- 57 at 200 simulations)
+  { id: "transformer200", file: "transformer", name: "The Transformer, thinking", elo: "about 2900", mb: 10.1, sims: 200,
+    what: "The same network, but it looks ahead: 200 positions per move. Much stronger, and slower (beta)." },
 ];
 const VARIETY_MOVES = 3;      // the model's first moves are sampled among its top choices, so games differ
 
@@ -76,15 +81,36 @@ function render() {
   $("bar-fill").style.width = you + "%";
   $("bar-you").textContent = `You ${you}%`;
   $("bar-model").textContent = `${model ? model.name : "Model"} ${100 - you}%`;
+  $("think").hidden = !(busy && model && model.sims);
+  if (!busy) $("think-fill").style.width = "0%";
+  $("think-time").textContent = lastThinkMs && model && model.sims
+    ? `Last move: ${(lastThinkMs / 1000).toFixed(1)} s of thinking` : "";
   $("undo").disabled = busy || game.history().length < (human === "w" ? 2 : 3) && !(human === "b" && game.history().length === 2);
 }
 
 // The result is announced on the board itself (2026-11-15, the user): win, loss or draw, with the reason.
 let resultDismissed = false;
+let resultReady = false;      // true once the pause after the last move is over
+let resultTimer = null;
 function showResult() {
   const el = $("result");
-  if (!model || !game.isGameOver()) { el.hidden = true; resultDismissed = false; return; }
+  if (!model || !game.isGameOver()) {
+    el.hidden = true; resultDismissed = false; resultReady = false;
+    clearTimeout(resultTimer); resultTimer = null;
+    return;
+  }
   if (resultDismissed) { el.hidden = true; return; }
+  // The card waits, so the last move is seen on the board first (the user lost a game and never saw the mating
+  // move, 2026-11-15): 1.8 s after the model's move, 0.9 s after the visitor's own.
+  if (!resultReady) {
+    el.hidden = true;
+    if (!resultTimer) {
+      const modelMovedLast = game.turn() === human;
+      resultTimer = setTimeout(() => { resultTimer = null; resultReady = true; showResult(); },
+                               modelMovedLast ? 1800 : 900);
+    }
+    return;
+  }
   let kind, title, why;
   if (game.isCheckmate()) {
     const won = game.turn() !== human;
@@ -119,17 +145,28 @@ function setStatus() {
   else if (game.isInsufficientMaterial()) statusEl.textContent = "Draw: not enough pieces to mate.";
   else if (game.isDraw()) statusEl.textContent = "Draw by the fifty-move rule.";
   else if (busy) statusEl.textContent = `${model.name} is thinking…`;
+  else if (game.turn() !== human) statusEl.textContent = `${model.name} to move…`;
   else statusEl.textContent = (game.inCheck() ? "Check. " : "") + "Your move.";
 }
 
 async function load(m) {
-  if (sessions[m.id]) return sessions[m.id];
+  const file = m.file || m.id;                      // two opponents can share one network file
+  if (sessions[file]) return sessions[file];
   statusEl.textContent = `Loading ${m.name} (${m.mb} MB)…`;
-  const res = await fetch(`models/${m.id}.onnx`);
+  const res = await fetch(`models/${file}.onnx`);
   if (!res.ok) throw new Error("download failed: " + res.status);
   const buf = await res.arrayBuffer();
-  sessions[m.id] = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
-  return sessions[m.id];
+  sessions[file] = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
+  return sessions[file];
+}
+
+// the sound for a move that was just played (chess.js move object), and for the end of the game
+function moveSound(m) {
+  if (game.isGameOver()) {
+    sound.play(m.captured ? "capture" : "move");
+    const kind = game.isCheckmate() ? (game.turn() === human ? "loss" : "win") : "draw";
+    setTimeout(() => sound.play(kind), game.turn() === human ? 1800 : 900);   // with the result card
+  } else sound.play(game.inCheck() ? "check" : m.captured ? "capture" : "move");
 }
 
 async function modelMove() {
@@ -138,30 +175,54 @@ async function modelMove() {
   busy = true; setStatus(); render();
   try {
     const session = await load(model);
-    const { x, moves } = encode(game);
+    const run = async (x) => {
+      const out = await session.run({ x: new ort.Tensor("float32", x, [1, 18, 8, 8]) });
+      return { p: out.p.data, v: out.v.data };
+    };
     const t0 = performance.now();
-    const out = await session.run({ x: new ort.Tensor("float32", x, [1, 18, 8, 8]) });
-    const logits = out.p.data, v = out.v.data;
-    const mx = Math.max(v[0], v[1], v[2]);
-    const e = [0, 1, 2].map((i) => Math.exp(v[i] - mx));
-    const score = (e[0] + 0.5 * e[1]) / (e[0] + e[1] + e[2]);
-    let choice = moves.reduce((a, b) => (logits[b.index] > logits[a.index] ? b : a));
     const modelPlies = Math.floor(game.history().length / 2);
-    if (modelPlies < VARIETY_MOVES) {
-      // sample among moves at least half as likely as the first choice, in proportion to their probability
-      const top = logits[choice.index];
-      const pool = moves.filter((m) => logits[m.index] >= top - Math.LN2);
-      const w = pool.map((m) => Math.exp(logits[m.index] - top));
-      let r = Math.random() * w.reduce((a, b) => a + b, 0);
-      for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) { choice = pool[i]; break; } }
+    const pickFrom = (items, weight) => {                   // random choice in proportion to weight
+      let r = Math.random() * items.reduce((acc, it) => acc + weight(it), 0);
+      for (const it of items) { r -= weight(it); if (r <= 0) return it; }
+      return items[items.length - 1];
+    };
+    let m, score;
+    if (model.sims) {
+      // search: the most-visited move; in the first moves, any move with at least half the top visits may be played
+      const res = await search(game, run, model.sims, (done, of) => {
+        if (mine !== token) return;
+        statusEl.textContent = `${model.name}… ${done} / ${of}`;
+        $("think-fill").style.width = Math.round(100 * done / of) + "%";
+      }, () => mine !== token);
+      if (!res || mine !== token) return;
+      m = res.move; score = res.score;
+      if (modelPlies < VARIETY_MOVES) {
+        const top = Math.max(...res.visits.map((v) => v.n));
+        m = pickFrom(res.visits.filter((v) => v.n >= top / 2), (v) => v.n).move;
+      }
+      lastThinkMs = Math.round(performance.now() - t0);
+    } else {
+      const { x, moves } = encode(game);
+      const out = await run(x);
+      const logits = out.p, v = out.v;
+      const mx = Math.max(v[0], v[1], v[2]);
+      const e = [0, 1, 2].map((i) => Math.exp(v[i] - mx));
+      score = (e[0] + 0.5 * e[1]) / (e[0] + e[1] + e[2]);
+      let choice = moves.reduce((x1, x2) => (logits[x2.index] > logits[x1.index] ? x2 : x1));
+      if (modelPlies < VARIETY_MOVES) {
+        // sample among moves at least half as likely as the first choice, in proportion to their probability
+        const top = logits[choice.index];
+        choice = pickFrom(moves.filter((c) => logits[c.index] >= top - Math.LN2), (c) => Math.exp(logits[c.index] - top));
+      }
+      m = choice.move;
+      const wait = 350 - (performance.now() - t0);          // a short pause so the move is easy to follow
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     }
-    const wait = 350 - (performance.now() - t0);            // a short pause so the move is easy to follow
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     if (mine !== token) return;                             // a new game started meanwhile
     modelScore = score;
-    const m = choice.move;
-    game.move({ from: m.from, to: m.to, promotion: m.promotion });
+    const played = game.move({ from: m.from, to: m.to, promotion: m.promotion });
     lastMove = { from: m.from, to: m.to };
+    moveSound(played);
   } catch (err) {
     statusEl.textContent = "The model could not be loaded: " + err.message;
     busy = false; render();
@@ -170,13 +231,18 @@ async function modelMove() {
   busy = false; setStatus(); render();
 }
 
+let lastThinkMs = null;       // how long the last search took (shown under the board, useful on phones)
+window.__lastThinkMs = () => lastThinkMs;
+window.__soundState = () => sound.state();
+
 function tryMove(from, to, promotion) {
   const legal = game.moves({ square: from, verbose: true }).filter((m) => m.to === to);
   if (!legal.length) return false;
   if (legal[0].promotion && !promotion) { askPromotion(from, to); return true; }
-  game.move({ from, to, promotion });
+  const played = game.move({ from, to, promotion });
   lastMove = { from, to };
   selected = null;
+  moveSound(played);
   setStatus(); render();
   modelMove();
   return true;
@@ -266,12 +332,18 @@ function newGame() {
   if (fen) game.load(fen); else game.reset();
   human = colourChoice === "r" ? (Math.random() < 0.5 ? "w" : "b") : colourChoice;
   flipped = human === "b";
-  selected = null; lastMove = null; modelScore = null; busy = false;
+  selected = null; lastMove = null; modelScore = null; busy = false; lastThinkMs = null;
   setStatus(); render();
   modelMove();
 }
 
 $("new").onclick = newGame;
+// sound: browsers allow it only after a press, so the first press anywhere unlocks it
+window.addEventListener("pointerdown", () => sound.unlock(), { capture: true });
+const soundBtn = $("sound");
+const soundLabel = () => { soundBtn.textContent = sound.isMuted() ? "Sound: off" : "Sound: on"; };
+soundBtn.onclick = () => { sound.setMuted(!sound.isMuted()); soundLabel(); if (!sound.isMuted()) sound.play("move"); };
+soundLabel();
 $("flip").onclick = () => { flipped = !flipped; render(); };
 $("undo").onclick = () => {
   if (busy) return;

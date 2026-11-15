@@ -41,6 +41,9 @@
     <p>The ratings are measured in games against Stockfish's limited-strength levels at 2 minutes + 1 second.
        They are on Stockfish's scale, which is anchored to engine rating lists, so read them as a rough
        guide, not as a human rating.</p>
+    <p>"The Transformer, thinking" adds search: before each move it tries 200 positions, guided by the
+       network, and plays the move it visited most. It is far stronger, and it needs a few seconds per move
+       (longer on phones).</p>
     <p>To keep games from repeating, the model picks among its top choices in its first three moves.
        After that it always plays its first choice.</p>
     <p>Nothing you play is uploaded. The model files are downloaded once and run on your device.</p>
@@ -64,7 +67,10 @@
       <button id="new">New game</button>
       <button id="undo">Take back</button>
       <button id="flip">Flip board</button>
+      <button id="sound">Sound: on</button>
     </div>
+    <div id="think" class="think" hidden><div id="think-fill" class="think-fill"></div></div>
+    <div id="think-time" class="think-time"></div>
   </section>
 
   <section class="panel">

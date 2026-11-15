@@ -119,3 +119,9 @@ footer { max-width: 1080px; margin: 0 auto; padding: 8px 16px 32px; color: var(-
 .hint { color: #ff9d9d; min-height: 1.4em; margin: 8px 0 0; }
 .vs { cursor: default; border: 1px solid var(--line); background: var(--panel); }
 .change { margin-top: 8px; font-size: .9rem; }
+
+/* thinking progress for the search opponent */
+.think { height: 6px; border-radius: 3px; background: #2a2d37; margin-top: 10px; overflow: hidden; }
+.think[hidden] { display: none; }
+.think-fill { height: 100%; width: 0; background: var(--green); transition: width .15s linear; }
+.think-time { color: var(--muted); font-size: .82rem; min-height: 1.3em; margin-top: 4px; }
