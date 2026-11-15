@@ -12,6 +12,14 @@ import { encode } from "./encode.js";
 
 const C_PUCT = 1.5, FPU = 0.25;
 
+// Without threads the network runs on the page's own thread, and a chain of awaits never lets the browser repaint:
+// the page froze for the whole search (2026-11-15, 19 s on the public site). A MessageChannel message is a real
+// task, so awaiting one hands control back to the browser without setTimeout's 4 ms minimum.
+const channel = new MessageChannel();
+let wake = null;
+channel.port1.onmessage = () => { const w = wake; wake = null; if (w) w(); };
+function breathe() { return new Promise((r) => { wake = r; channel.port2.postMessage(0); }); }
+
 function key(fen) { return fen.split(" ", 4).join(" "); }      // pieces, side to move, castling, en passant
 
 function expand(node, moves, logits) {
@@ -93,6 +101,7 @@ export async function search(game, run, sims, onProgress, cancelled) {
     }
     done++;
     if (onProgress && (done % 5 === 0 || done === sims)) onProgress(done, sims);
+    if (done % 2 === 0) await breathe();              // let the page repaint and take input
   }
   let a = 0, total = 0, wsum = 0;
   for (let i = 0; i < root.n.length; i++) {
