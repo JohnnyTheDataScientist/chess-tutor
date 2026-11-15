@@ -1,8 +1,8 @@
 // Play against the networks in the browser. The rules come from chess.js; the networks run with onnxruntime-web.
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
-import { encode } from "./encode.js?v=6";
-import { search } from "./search.js?v=6";
-import * as sound from "./sound.js?v=6";
+import { encode } from "./encode.js?v=7";
+import { search } from "./search.js?v=7";
+import * as sound from "./sound.js?v=7";
 
 // Ratings: no search, Stockfish's UCI_Elo scale at 120+1 (chess/logs/ratings_table.md, 2026-11-14).
 const MODELS = [
@@ -18,6 +18,7 @@ const MODELS = [
     mb: 10.1, sims: 50,
     what: "The same network, but it looks ahead: 50 positions per move. Stronger than the plain Transformer, a few seconds a move (beta)." },
 ];
+const MIN_REPLY_MS = 700;     // the shortest time between the visitor's move and the model's reply
 const VARIETY_MOVES = 3;      // the model's first moves are sampled among its top choices, so games differ
 
 const $ = (id) => document.getElementById(id);
@@ -217,9 +218,11 @@ async function modelMove() {
         choice = pickFrom(moves.filter((c) => logits[c.index] >= top - Math.LN2), (c) => Math.exp(logits[c.index] - top));
       }
       m = choice.move;
-      const wait = 350 - (performance.now() - t0);          // a short pause so the move is easy to follow
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     }
+    // Every opponent waits at least MIN_REPLY_MS after the visitor's move, so its move is easy to follow. The
+    // search can finish at once (a forced mate is found without the network), and then it moved instantly.
+    const wait = MIN_REPLY_MS - (performance.now() - t0);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     if (mine !== token) return;                             // a new game started meanwhile
     modelScore = score;
     const played = game.move({ from: m.from, to: m.to, promotion: m.promotion });
