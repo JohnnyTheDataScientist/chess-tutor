@@ -1,8 +1,8 @@
 // Play against the networks in the browser. The rules come from chess.js; the networks run with onnxruntime-web.
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0/+esm";
-import { encode } from "./encode.js?v=7";
-import { search } from "./search.js?v=7";
-import * as sound from "./sound.js?v=7";
+import { encode } from "./encode.js?v=8";
+import { search } from "./search.js?v=8";
+import * as sound from "./sound.js?v=8";
 
 // Ratings: no search, Stockfish's UCI_Elo scale at 120+1 (chess/logs/ratings_table.md, 2026-11-14).
 const MODELS = [
@@ -13,10 +13,10 @@ const MODELS = [
   { id: "transformer", name: "The Transformer", elo: "about 1950", mb: 10.1,
     what: "A larger network with attention, taught by Stockfish. Plays instantly." },
   // the same network with search. 200 simulations (rated 2878 +- 57) took ~19 s a move in the browser, too slow
-  // (the user, 2026-11-15), so it thinks 50 positions. 50 simulations has not been rated yet.
-  { id: "transformer50", file: "transformer", name: "The Transformer, thinking", elo: "stronger, not rated yet",
+  // (the user, 2026-11-15), so it thinks 50 positions: rated 2529 +- 56 over 40 games (2026-11-15).
+  { id: "transformer50", file: "transformer", name: "The Transformer, thinking", elo: "about 2530",
     mb: 10.1, sims: 50,
-    what: "The same network, but it looks ahead: 50 positions per move. Stronger than the plain Transformer, a few seconds a move (beta)." },
+    what: "The same network, but it looks ahead: 50 positions per move. About 580 points stronger than the plain Transformer, a few seconds a move." },
 ];
 const MIN_REPLY_MS = 700;     // the shortest time between the visitor's move and the model's reply
 const VARIETY_MOVES = 3;      // the model's first moves are sampled among its top choices, so games differ
